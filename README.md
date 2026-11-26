@@ -22,7 +22,7 @@ It walks while Claude works, naps when you're away, blushes when you poke it, an
 
 | | |
 |---|---|
-| 🐾 **Lives beside the chat** | A side pane with an animated pixel pet, drawn right in your terminal. |
+| 🐾 **Lives beside the chat** | A side pane with an animated pixel pet: drawn in text cells in the terminal, as a crisp picture in the Claude desktop app. |
 | 🖱️ **Click it** | Hearts, shyness, or a tsundere *"hmph!"* and turn-away. Best friends sometimes get star eyes. |
 | 💬 **Speech bubbles** | Comments on your tasks, tool runs, errors and finished replies, plus idle chatter. Built-in lines by default, or optional AI-written lines. |
 | 💞 **Affection** | The more you hang out, the sweeter it gets: four relationship levels shift which reactions you see. Saved across sessions. |
@@ -119,8 +119,9 @@ Failed tool calls and permission prompts always stay in the chat. Press **ctrl+o
 ### Requirements
 
 - Claude Code with mod (hooks module) support
-- A terminal with true color. On Windows, use **Windows Terminal**; the legacy console may draw the pixels poorly.
+- **In a terminal:** true color. On Windows, use **Windows Terminal**; the legacy console may draw the pixels poorly. On macOS, iTerm2, Ghostty or WezTerm work best.
 - Mouse clicks need a terminal that passes them to apps (Windows Terminal, iTerm2, most Linux terminals do).
+- **In the Claude desktop app:** works out of the box, clicks included. Idle, work and sleep animate inside the picture itself, so the pane redraws only on events.
 
 ### Troubleshooting
 
@@ -162,7 +163,7 @@ The sprite is drawn by one pure function between the `// <sprite>` markers in `h
 
 | | |
 |---|---|
-| 🐾 **Живе поруч із чатом** | Бічна панель з анімованим піксельним улюбленцем просто у терміналі. |
+| 🐾 **Живе поруч із чатом** | Бічна панель з анімованим піксельним улюбленцем: у терміналі — з текстових клітинок, у десктопному застосунку Claude — чіткою картинкою. |
 | 🖱️ **Клікни по ньому** | Сердечка, сором'язливість або цундерське «хмф!» з відвертанням. Найкращі друзі іноді бачать зірочки в очах. |
 | 💬 **Хмарки з репліками** | Коментує завдання, інструменти, помилки й готові відповіді, а на простої нудьгує. За замовчуванням — вбудовані фрази, за бажанням — фрази від ШІ. |
 | 💞 **Прихильність** | Що більше спілкуєтесь, то він ніжніший: чотири рівні стосунків змінюють, які реакції ти бачиш. Зберігається між сесіями. |
@@ -259,8 +260,9 @@ claude plugin install clawd-pet --marketplace y-teitelman/clawd-pet
 ### Вимоги
 
 - Claude Code з підтримкою модів (hooks module)
-- Термінал із true color. На Windows використовуй **Windows Terminal**; у старій консолі пікселі можуть малюватися криво.
+- **У терміналі:** true color. На Windows використовуй **Windows Terminal**; у старій консолі пікселі можуть малюватися криво. На macOS найкраще працюють iTerm2, Ghostty чи WezTerm.
 - Для кліків термінал має передавати мишу програмам (Windows Terminal, iTerm2 і більшість терміналів Linux це вміють).
+- **У десктопному застосунку Claude:** працює одразу, з кліками. Спокій, робота й сон анімуються всередині самої картинки, тож панель перемальовується лише на події.
 
 ### Якщо щось не так
 

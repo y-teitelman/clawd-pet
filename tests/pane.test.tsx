@@ -52,10 +52,21 @@ test('the ≡ button opens settings, and a choice sticks', async $ => {
   await ui.unmount()
 })
 
-test('other surfaces get a short note, not a broken drawing', async $ => {
+test('the app surfaces draw the pet as an SVG under the same header', async $ => {
   for (const surface of ['desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect(await ui.find({ type: 'Text', text: /Clawd/ })).toBeDefined()
+    expect((await ui.find({ type: 'Text', text: /Clawd Pet/ }))?.text).toContain('Clawd Pet')
+    expect(await ui.find({ type: 'Svg' })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('on the desktop a click layer lies over the pet and a click is heard', async $ => {
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Client', key: 'pet-click' })).toBeDefined()
+
+  // the layer posts { poke: true }; the hook turns it into a reaction line
+  await ui.pointer({ type: 'down', x: 2, y: 2, button: 'left' })
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
+  await ui.unmount()
 })

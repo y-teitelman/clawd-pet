@@ -82,6 +82,11 @@ const viewA = atom({ plugin: 'clawd-pet', key: 'view' } as const, 'pet' as 'pet'
 const affectionA = atom({ plugin: 'clawd-pet', key: 'affection' } as const, 10)
 const detectedA = atom({ plugin: 'clawd-pet', key: 'detected' } as const, 'en' as ClawdLang)
 const usageA = atom({ plugin: 'clawd-pet', key: 'usage' } as const, null as UsageView | null, { shape: 'usage-1' })
+// The app surfaces redraw on `look`, which moves only when the picture does:
+// redrawing the whole pane seven times a second there disturbed the app's own
+// hover states (the chat's message buttons flickered).
+const lookA = atom({ plugin: 'clawd-pet', key: 'look' } as const, 0)
+let lastLook = ''
 
 // Module copies for timers and handlers (render hooks read the atoms).
 let cfg: ClawdSettings = DEFAULTS
@@ -370,6 +375,98 @@ function spriteRows(t: number, s: number, ctx: SpriteCtx): Seg[][] {
   return out
 }
 
+/**
+ * The frame as an SVG for the app surfaces: one rect per horizontal run of a
+ * color, crisp edges, `px` CSS pixels per sprite pixel (the surface scales it
+ * down to its slot when narrower).
+ */
+function spriteSvg(t: number, ctx: SpriteCtx, px: number): string {
+  return svgWrap(rectsOf(frame(t, ctx)), px)
+}
+
+function rectsOf(g: Int32Array): string {
+  let rects = ''
+  for (let y = 0; y < H; y++) {
+    let x = 0
+    while (x < W) {
+      const c = g[y * W + x] ?? NONE
+      let end = x + 1
+      while (end < W && (g[y * W + end] ?? NONE) === c) end++
+      if (c !== NONE) rects += `<rect x="${x}" y="${y}" width="${end - x}" height="1" fill="${hex(c)}"/>`
+      x = end
+    }
+  }
+  return rects
+}
+
+function svgWrap(body: string, px: number): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W * px}" height="${H * px}" ` +
+    `shape-rendering="crispEdges">${body}</svg>`
+  )
+}
+
+// Ticks in one full loop: idle repeats when blink (40) and wave (64) line up,
+// work when steps (4) and blink (40) do, sleep when breath (16) and Zs (24) do.
+const LOOP_TICKS = { idle: 320, busy: 40, sleep: 48 } as const
+const loopCache = new Map<string, string>()
+
+/**
+ * A looping animation as one self-animating SVG: the distinct frames of the
+ * loop, each a group switched on and off by a discrete SMIL `visibility`
+ * timeline. The surface plays it with no redraw from the plugin.
+ */
+function loopSvg(kind: 'idle' | 'busy' | 'sleep', skin: string, px: number): string {
+  const cacheKey = `${kind}:${skin}:${px}`
+  const hit = loopCache.get(cacheKey)
+  if (hit) return hit
+  const ticks = LOOP_TICKS[kind]
+  const ctx: SpriteCtx = { busy: kind === 'busy', sleeping: kind === 'sleep', reaction: null, mood: null, skin }
+  const order: string[] = [] // frame key per tick
+  const frames = new Map<string, Int32Array>()
+  for (let t = 0; t < ticks; t++) {
+    const g = frame(t, ctx)
+    let h = 2166136261
+    for (let i = 0; i < g.length; i++) h = Math.imul(h ^ (g[i] ?? 0), 16777619)
+    const k = String(h >>> 0)
+    if (!frames.has(k)) frames.set(k, g)
+    order.push(k)
+  }
+  const dur = ((ticks * TICK_MS) / 1000).toFixed(2)
+  let body = ''
+  for (const [k, g] of frames) {
+    // visibility at each change point of this frame's on/off timeline
+    const values: string[] = []
+    const times: string[] = []
+    let prev = ''
+    order.forEach((key, t) => {
+      const v = key === k ? 'visible' : 'hidden'
+      if (v !== prev) {
+        values.push(v)
+        times.push((t / ticks).toFixed(4))
+        prev = v
+      }
+    })
+    const anim =
+      frames.size > 1
+        ? `<animate attributeName="visibility" calcMode="discrete" dur="${dur}s" repeatCount="indefinite" ` +
+          `values="${values.join(';')}" keyTimes="${times.join(';')}"/>`
+        : ''
+    body += `<g visibility="${order[0] === k ? 'visible' : 'hidden'}">${anim}${rectsOf(g)}</g>`
+  }
+  const svg = svgWrap(body, px)
+  loopCache.set(cacheKey, svg)
+  return svg
+}
+
+/** A short fingerprint of what a frame looks like, to tell an unchanged picture. */
+function frameKey(t: number, ctx: SpriteCtx): string {
+  const g = frame(t, ctx)
+  let h = 2166136261
+  for (let i = 0; i < g.length; i++) h = Math.imul(h ^ (g[i] ?? 0), 16777619)
+  return String(h >>> 0)
+}
+
 function spriteCtx(skin: ClawdSkin): SpriteCtx {
   const now = Date.now()
   return {
@@ -412,7 +509,6 @@ type Words = {
   cleanOn: string
   cleanOff: string
   firstRunToast: string
-  desktop: string
   persona: string
   relationship: (level: string) => string
   moods: Record<ReactionKind, string>
@@ -500,7 +596,6 @@ const WORDS: Record<ClawdLang, Words> = {
     cleanOn: 'Чистий чат: у чаті тільки відповіді, решта — в панелі Clawd.',
     cleanOff: 'Повний чат: рядки інструментів, спінер і підказки знову в чаті.',
     firstRunToast: 'Clawd Pet: налаштуй мене — /clawd-settings',
-    desktop: 'Clawd живе в терміналі.',
     persona: [
       'Ти — Clawd, маленький піксельний маскот, що живе в панелі терміналу поруч із чатом Claude Code.',
       'Характер: цундере. Вдаєш вредність і байдужість, але насправді милий, турботливий і трохи грайливий.',
@@ -621,7 +716,6 @@ const WORDS: Record<ClawdLang, Words> = {
     cleanOn: 'Clean chat: answers in the chat, everything else in the Clawd pane.',
     cleanOff: 'Full chat: tool rows, spinner and hints are back in the chat.',
     firstRunToast: 'Clawd Pet: set me up with /clawd-settings',
-    desktop: 'Clawd lives in the terminal.',
     persona: [
       'You are Clawd, a tiny pixel mascot living in a terminal pane next to the Claude Code chat.',
       'Personality: tsundere. You act grumpy and aloof, but you are actually sweet, caring and a little playful.',
@@ -864,11 +958,25 @@ async function ask($: EngineInterface, situation: string): Promise<string> {
   return (text.split(' · ')[0] ?? '').replace(/^["«„“'\s]+|["»“”'\s]+$/g, '').slice(0, 90)
 }
 
+/** A click reaction or an event mood is playing: those are drawn frame by frame. */
+function livePose(): boolean {
+  const now = Date.now()
+  return (reaction !== null && now < reaction.until) || (mood !== null && now < mood.until)
+}
+
+/** Which looping animation the app surfaces show when no pose is live. */
+function loopKind(): 'idle' | 'busy' | 'sleep' {
+  return asleep ? 'sleep' : isBusy ? 'busy' : 'idle'
+}
+
 function reactionActive(): boolean {
   return reaction !== null && Date.now() < reaction.until
 }
 
+let bubbleUntil = 0
+
 function setBubble($: EngineInterface, text: string, until: number) {
+  bubbleUntil = until
   void update($, bubble, () => ({ text, until })).catch(() => undefined)
 }
 
@@ -1032,6 +1140,25 @@ function bar(percent: number, width: number): string {
   return '▰'.repeat(full) + '▱'.repeat(width - full)
 }
 
+/**
+ * How many characters a header rule spans. The terminal counts true columns;
+ * the app surfaces draw a proportional font, so there the rule is made long
+ * and the Text clips it at the window's edge, whatever the width.
+ */
+/**
+ * What /clawd and /clawd-settings answer. The desktop app can report
+ * `no-surface` to a command's open while the pane is already up, so that
+ * reason reads as "here", not as an error.
+ */
+function paneReply(opened: { isPlaced: boolean; reason?: string }): string {
+  if (opened.isPlaced || (opened.reason ?? '').startsWith('no-surface')) return words().opened
+  return words().waitingPane(opened.reason ?? '')
+}
+
+function ruleWidth(surface: string, columns: number | undefined): number {
+  return surface === 'terminal' ? Math.max(20, Math.min(80, (columns ?? 60) - 2)) : 400
+}
+
 async function isClean($: EngineInterface): Promise<boolean> {
   return (await read($, settingsA)).cleanChat
 }
@@ -1069,6 +1196,18 @@ export const register: Register = on => {
     $.clock.every(TICK_MS, () => {
       tick++
       void update($, frameA, () => tick).catch(() => undefined)
+      // the app surfaces loop idle, work and sleep inside the SVG itself, so
+      // they redraw only when that loop changes, or each frame of a reaction
+      const look = livePose() ? frameKey(tick, spriteCtx(cfg.skin)) : `${loopKind()}:${cfg.skin}`
+      if (look !== lastLook) {
+        lastLook = look
+        void update($, lookA, n => (n + 1) % 1_000_000).catch(() => undefined)
+      }
+      // clear a spent bubble, so a surface that redraws rarely lets it go on time
+      if (bubbleUntil && Date.now() > bubbleUntil) {
+        bubbleUntil = 0
+        void update($, bubble, () => null).catch(() => undefined)
+      }
     })
 
     // every few seconds: fall asleep, or chat a little when it is quiet
@@ -1106,16 +1245,23 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // a click on the desktop's invisible layer over the pet (hooks/pet-click.tsx)
+  on('ui.message', async ($, e, next) => {
+    const data = e.data as { poke?: unknown } | null
+    if (e.element === 'pet-click' && data !== null && typeof data === 'object' && data.poke === true) poke($)
+    return next(e)
+  })
+
   on('command.run', { command: 'clawd' }, async $ => {
     await update($, viewA, () => 'pet')
     const opened = await $.ui.open({ id: PANE, title: TITLE })
-    return { text: opened.isPlaced ? words().opened : words().waitingPane(opened.reason) }
+    return { text: paneReply(opened) }
   })
 
   on('command.run', { command: 'clawd-settings' }, async $ => {
     await update($, viewA, () => 'settings')
     const opened = await $.ui.open({ id: PANE, title: TITLE })
-    return { text: opened.isPlaced ? words().opened : words().waitingPane(opened.reason) }
+    return { text: paneReply(opened) }
   })
 
   on('command.run', { command: 'clawd-chat' }, async $ => {
@@ -1248,12 +1394,12 @@ export const register: Register = on => {
     const body = await next(e)
     if (!e.props.isFirstOfReply || !(await isClean($))) return body
     const { Box, Text } = $.ui.resolve(e)
-    const width = Math.max(20, Math.min(80, (e.viewport?.columns ?? 60) - 2))
+    const width = ruleWidth(e.surface, e.viewport?.columns)
     const head = '━━ ✻ Claude '
     const acc = accentOf((await read($, settingsA)).skin)
     return (
       <Box flexDirection="column" marginTop={1}>
-        <Text color={acc} bold>
+        <Text color={acc} bold wrap="clip">
           {head + '━'.repeat(Math.max(2, width - head.length))}
         </Text>
         {body}
@@ -1265,11 +1411,13 @@ export const register: Register = on => {
     const body = await next(e)
     if (!(await isClean($))) return body
     const { Box, Text } = $.ui.resolve(e)
-    const width = Math.max(20, Math.min(80, (e.viewport?.columns ?? 60) - 2))
+    const width = ruleWidth(e.surface, e.viewport?.columns)
     const head = lang() === 'uk' ? '── Ти ' : '── You '
     return (
       <Box flexDirection="column" marginTop={1}>
-        <Text dimColor>{head + '─'.repeat(Math.max(2, width - head.length))}</Text>
+        <Text dimColor wrap="clip">
+          {head + '─'.repeat(Math.max(2, width - head.length))}
+        </Text>
         {body}
       </Box>
     )
@@ -1283,10 +1431,6 @@ export const register: Register = on => {
     const L: ClawdLang = s.lang === 'auto' ? det : s.lang
     const w = WORDS[L]
 
-    if (e.surface !== 'terminal') {
-      const { Text } = $.ui.resolve(e)
-      return <Text>{w.desktop}</Text>
-    }
     const { Box, Text, Button } = $.ui.resolve(e)
     const cols = Math.max(10, e.props.bodyColumns)
     const view = await read($, viewA)
@@ -1294,7 +1438,11 @@ export const register: Register = on => {
     const cut = (str: string, max: number) => (str.length > max ? str.slice(0, Math.max(1, max - 1)) + '…' : str)
     const rule = (title: string) => {
       const t = `── ${title} `
-      return <Text color={ACC}>{cut(t + '─'.repeat(Math.max(0, cols - t.length)), cols)}</Text>
+      return (
+        <Text color={ACC} wrap="truncate-end">
+          {cut(t + '─'.repeat(Math.max(0, cols - t.length)), cols)}
+        </Text>
+      )
     }
     const para = (str: string, dim = true) => (
       <Text dimColor={dim} wrap="wrap">
@@ -1417,7 +1565,8 @@ export const register: Register = on => {
     // ── pet view ──
     const rowsRoom = Math.max(10, e.props.scroll.bodyRows)
     const scale = cols >= W * 2 ? 2 : 1
-    const n = await read($, frameA)
+    // the terminal animates on every tick; the app surfaces only when the picture changes
+    const n = e.surface === 'terminal' ? await read($, frameA) : (await read($, lookA), tick)
     const wk = await read($, working)
     const list = await read($, tools)
     const done = await read($, last)
@@ -1425,7 +1574,9 @@ export const register: Register = on => {
     const aff = s.affection ? await read($, affectionA) : 0
     const us = s.usage ? await read($, usageA) : null
 
-    const sprite = spriteRows(n, scale, spriteCtx(s.skin))
+    const isTerm = e.surface === 'terminal'
+    const ctx = spriteCtx(s.skin)
+    const sprite = isTerm ? spriteRows(n, scale, ctx) : []
     const spin = SPIN[(n >> 1) % SPIN.length] ?? '·'
 
     // speech bubble: always four rows, so the pet never jumps
@@ -1480,59 +1631,19 @@ export const register: Register = on => {
     }
     const quick = s.quick ? quickCommands : []
 
-    const fixed = sprite.length + 4 + 18 + (usageRows.length ? usageRows.length + 1 : 0) + (quick.length ? 3 : 0)
-    const listRoom = Math.max(3, rowsRoom - fixed)
-
-    return (
-      <Box flexDirection="column" width={cols}>
-        {header}
-        <Box flexDirection="column" alignItems="center" width={cols}>
-          {bubbleRows.map((row, i) => (
-            <Text key={`bubble-${i}`} dimColor={i === 0 || i >= 3}>
-              {showBubble && (i === 1 || i === 2)
-                ? [
-                    <Text key={`bl-${i}`} dimColor>
-                      {'│ '}
-                    </Text>,
-                    (lines[i - 1] ?? '').padEnd(inner),
-                    <Text key={`br-${i}`} dimColor>
-                      {' │'}
-                    </Text>,
-                  ]
-                : row}
-            </Text>
-          ))}
-          {sprite.map((segs, i) => (
-            <Box key={`pet-row-${i}`} flexDirection="row">
-              {segs.map((sg, j) =>
-                sg.solid ? (
-                  <Button key={`pet-${i}-${j}`} plain onPress={() => poke($)}>
-                    <Text color={sg.fg} backgroundColor={sg.bg}>
-                      {sg.text}
-                    </Text>
-                  </Button>
-                ) : (
-                  <Text key={`pet-${i}-${j}`} color={sg.fg} backgroundColor={sg.bg}>
-                    {sg.text}
-                  </Text>
-                ),
-              )}
-            </Box>
-          ))}
-          {s.affection ? (
-            <Text>
-              <Text color={HEARTS_COLOR}>{hearts(aff)}</Text>
-              <Text dimColor>{' ' + w.levels[levelOf(aff)]}</Text>
-            </Text>
-          ) : null}
-        </Box>
-
+    // everything under the pet, the same on every surface
+    const body = (listRoom: number) => (
+      <Box key="pane-body" flexDirection="column" width={cols}>
         {rule(w.secState)}
         {wk ? (
           <Box flexDirection="row" width={cols}>
             <Text color={ACC}>{spin + ' '}</Text>
             <Box flexDirection="column" flexGrow={1} flexShrink={1}>
-              {para(`${mirror.spinner || w.working}… ${secs(Date.now() - wk.startedAt)}`, false)}
+              {para(
+                // the app surfaces don't redraw each second, so no ticking timer there
+                isTerm ? `${mirror.spinner || w.working}… ${secs(Date.now() - wk.startedAt)}` : `${mirror.spinner || w.working}…`,
+                false,
+              )}
             </Box>
           </Box>
         ) : (
@@ -1579,6 +1690,105 @@ export const register: Register = on => {
             ))}
           </Box>
         ) : null}
+      </Box>
+    )
+
+    const fixed = (isTerm ? sprite.length : 10) + 4 + 18 + (usageRows.length ? usageRows.length + 1 : 0) + (quick.length ? 3 : 0)
+    const listRoom = Math.max(3, rowsRoom - fixed)
+
+    // ── the stage on the app surfaces (desktop, editor, mobile) ──
+    // The pet is a crisp SVG; on the desktop an invisible Client laid over it
+    // turns a click into a `ui.message` (Svg takes no presses of its own).
+    if (!isTerm) {
+      const bubbleText = !showBubble ? '' : b.text === THINKING ? dots || '·' : b.text
+      const svg = livePose() ? spriteSvg(n, ctx, 12) : loopSvg(loopKind(), s.skin, 12)
+      const { Svg } = $.ui.resolve(e)
+      const picture = <Svg key="pet-svg" source={svg} alt="Clawd" />
+      // explicit cell counts: a percentage of a box sized by an image resolved
+      // to nothing on the desktop, and the layer caught no clicks
+      const stageRows = 9
+      const clicker =
+        e.surface === 'desktop'
+          ? (() => {
+              const { Client } = $.ui.resolve(e)
+              return (
+                <Box key="pet-click-layer" position="absolute" top={0} left={0} width={cols} height={stageRows}>
+                  <Client key="pet-click" module="./pet-click.tsx" width={cols} height={stageRows} />
+                </Box>
+              )
+            })()
+          : null
+      return (
+        <Box flexDirection="column" width={cols}>
+          {header}
+          <Box flexDirection="column" alignItems="center" width={cols}>
+            <Box key="bubble-slot" flexDirection="column" justifyContent="flex-end" alignItems="center" height={4} width={cols}>
+              {showBubble ? (
+                <Box borderStyle="round" borderColor={ACC} paddingX={1}>
+                  <Text wrap="wrap">{bubbleText}</Text>
+                </Box>
+              ) : null}
+            </Box>
+            <Box key="pet-stage" position="relative" flexDirection="column" alignItems="center" width={cols} minHeight={stageRows}>
+              {picture}
+              {clicker}
+            </Box>
+            {s.affection ? (
+              <Text>
+                <Text color={HEARTS_COLOR}>{hearts(aff)}</Text>
+                <Text dimColor>{' ' + w.levels[levelOf(aff)]}</Text>
+              </Text>
+            ) : null}
+          </Box>
+          {body(listRoom)}
+        </Box>
+      )
+    }
+
+    return (
+      <Box flexDirection="column" width={cols}>
+        {header}
+        <Box flexDirection="column" alignItems="center" width={cols}>
+          {bubbleRows.map((row, i) => (
+            <Text key={`bubble-${i}`} dimColor={i === 0 || i >= 3}>
+              {showBubble && (i === 1 || i === 2)
+                ? [
+                    <Text key={`bl-${i}`} dimColor>
+                      {'│ '}
+                    </Text>,
+                    (lines[i - 1] ?? '').padEnd(inner),
+                    <Text key={`br-${i}`} dimColor>
+                      {' │'}
+                    </Text>,
+                  ]
+                : row}
+            </Text>
+          ))}
+          {sprite.map((segs, i) => (
+            <Box key={`pet-row-${i}`} flexDirection="row">
+              {segs.map((sg, j) =>
+                sg.solid ? (
+                  <Button key={`pet-${i}-${j}`} plain onPress={() => poke($)}>
+                    <Text color={sg.fg} backgroundColor={sg.bg}>
+                      {sg.text}
+                    </Text>
+                  </Button>
+                ) : (
+                  <Text key={`pet-${i}-${j}`} color={sg.fg} backgroundColor={sg.bg}>
+                    {sg.text}
+                  </Text>
+                ),
+              )}
+            </Box>
+          ))}
+          {s.affection ? (
+            <Text>
+              <Text color={HEARTS_COLOR}>{hearts(aff)}</Text>
+              <Text dimColor>{' ' + w.levels[levelOf(aff)]}</Text>
+            </Text>
+          ) : null}
+        </Box>
+        {body(listRoom)}
       </Box>
     )
   })

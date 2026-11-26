@@ -63,6 +63,8 @@ declare module 'claude-code' {
       affection: number
       detected: ClawdLang
       usage: Shaped<UsageView | null>
+      /** Bumps only when the pet's picture changes: what the app surfaces redraw on. */
+      look: number
     }
   }
 }
