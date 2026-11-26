@@ -11,7 +11,7 @@ export type LastTurn = { ms: number; tools: number; isAborted: boolean }
 
 export type Bubble = { text: string; until: number }
 
-export type ClawdLang = 'uk' | 'en'
+export type ClawdLang = 'uk' | 'en' | 'ja' | 'ko'
 
 export type ClawdSkin = 'classic' | 'mint' | 'lavender' | 'sky' | 'gold' | 'night'
 
@@ -19,7 +19,8 @@ export type ClawdSettings = {
   v: 1
   /** False until the person pressed Done on the first-run settings. */
   isSetUp: boolean
-  lang: 'auto' | ClawdLang
+  /** `custom`: a language of the person's own, translated by the model (ClawdPack). */
+  lang: 'auto' | ClawdLang | 'custom'
   /** Lines written by a small model (costs tokens) instead of built-in ones. */
   ai: boolean
   /** Whether the model may see the first 200 characters of a prompt. */
@@ -50,6 +51,31 @@ export type UsageView = {
   usd: number | null
 }
 
+/** A language of the person's own: the English UI text translated by the model. */
+export type ClawdPack = {
+  /** ISO 639 code, as the model named it. */
+  code: string
+  /** The language's name for itself. */
+  name: string
+  /** Its English name: what the model is told to speak. */
+  english: string
+  /** Which English text it was made from; another one marks it stale. */
+  hash: string
+  /** Flat keys ("labels.lang") to translated text; a missing key stays English. */
+  strings: Record<string, string>
+}
+
+/** Where the person is in choosing a language of their own. */
+export type ClawdLangFlow = {
+  step: 'idle' | 'typing' | 'checking' | 'confirm' | 'working' | 'blocked'
+  /** Why the field is shown again. */
+  note: '' | 'unknown' | 'failed'
+  reason: string
+  code: string
+  name: string
+  english: string
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'clawd-pet': {
@@ -59,12 +85,16 @@ declare module 'claude-code' {
       bubble: Shaped<Bubble | null>
       frame: number
       settings: Shaped<ClawdSettings>
-      view: 'pet' | 'settings'
+      view: 'pet' | 'settings' | 'help'
+      /** A reset waiting for the person's "yes". */
+      confirm: 'settings' | 'affection' | null
       affection: number
       detected: ClawdLang
       usage: Shaped<UsageView | null>
       /** Bumps only when the pet's picture changes: what the app surfaces redraw on. */
       look: number
+      pack: Shaped<ClawdPack | null>
+      langFlow: Shaped<ClawdLangFlow>
     }
   }
 }
