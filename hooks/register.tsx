@@ -482,6 +482,8 @@ function spriteCtx(skin: ClawdSkin): SpriteCtx {
 }
 
 // ── words: everything the pet says or shows, in both languages ──────────
+type DayPart = 'morning' | 'day' | 'evening' | 'night'
+
 type Words = {
   waiting: string
   sleeping: string
@@ -510,6 +512,7 @@ type Words = {
   cleanOff: string
   firstRunToast: string
   persona: string
+  limit: (chars: number) => string
   relationship: (level: string) => string
   moods: Record<ReactionKind, string>
   poke: (mood: string, busy: boolean, many: number) => string
@@ -520,8 +523,9 @@ type Words = {
   aborted: string
   idle: (mins: number) => string
   sleep: string
-  greet: (period: string, time: string) => string
-  periods: Record<'morning' | 'day' | 'evening' | 'night', string>
+  /** The line that waits in the bubble from the start until the first prompt. */
+  welcome: Record<DayPart | 'any', readonly string[]>
+  welcomeShort: string
   lines: Record<string, readonly string[]>
 }
 
@@ -597,12 +601,17 @@ const WORDS: Record<ClawdLang, Words> = {
     cleanOff: 'Повний чат: рядки інструментів, спінер і підказки знову в чаті.',
     firstRunToast: 'Clawd Pet: налаштуй мене — /clawd-settings',
     persona: [
-      'Ти — Clawd, маленький піксельний маскот, що живе в панелі терміналу поруч із чатом Claude Code.',
-      'Характер: цундере. Вдаєш вредність і байдужість, але насправді милий, турботливий і трохи грайливий.',
-      'Говориш українською, на «ти», як персонаж коміксу у хмарці.',
-      'Відповідай ОДНІЄЮ реплікою до 10 слів. Без лапок, без емодзі, без пояснень, без markdown.',
-      'Можна вигуки (хм!, пф, ну-ну, е-е). Не вигадуй фактів про код і не давай порад.',
+      'Ти — Clawd, маленький піксельний маскот, що живе в бічній панелі поруч із чатом Claude Code.',
+      'Характер: цундере. Вдаєш буркотливість і байдужість, але насправді милий, турботливий і трохи грайливий.',
+      'До користувача звертаєшся на «ти». Говориш як персонаж коміксу у хмарці: коротко, жваво, по-людськи.',
+      'Пиши грамотною, природною розмовною українською: без русизмів і калькованих з англійської зворотів;',
+      'стеж за відмінками, родами й узгодженням слів.',
+      'Відповідай ОДНІЄЮ реплікою: одне коротке завершене речення або два дуже коротких, зрозумілі без пояснень.',
+      'Без лапок, емодзі, markdown і ремарок у зірочках.',
+      'Можна вигуки: хм!, пф, ну-ну, е-е. Не вигадуй фактів про код і не давай порад.',
+      'Приклади тону: Пф! Не те щоб мені сподобалось! / Ой… ну ти чого… / Готово! Не дякуй. / Знову щось ламаємо? Жартую.',
     ].join(' '),
+    limit: n => `Репліка — не довша за ${n} символів разом із пробілами.`,
     relationship: level => `Ваші стосунки з користувачем: ${level}. Будь настільки відкритим, наскільки це пасує.`,
     moods: {
       hearts: 'тобі дуже приємно, ти розчулився і з тебе вилітають сердечка; репліка тепла й радісна, хоч і з ноткою збентеження',
@@ -624,8 +633,14 @@ const WORDS: Record<ClawdLang, Words> = {
     aborted: 'Користувач щойно перервав роботу Claude.',
     idle: mins => `Користувач уже ${mins} хв нічого не пише, ти нудьгуєш у своїй панелі.`,
     sleep: 'Ти засинаєш, бо користувач давно нічого не робить.',
-    greet: (period, time) => `Користувач щойно відкрив сесію. Зараз ${period}, ${time}. Привітайся.`,
-    periods: { morning: 'ранок', day: 'день', evening: 'вечір', night: 'глибока ніч' },
+    welcome: {
+      any: ['Привіт! Я Clawd, і я тут. Не те щоб чекав…', 'Привіт, я Clawd! Пиши — я поруч, якщо що.'],
+      morning: ['Доброго ранку! Я Clawd, і я тут. Каву пив?', 'Ранок! Я Clawd. Не те щоб я чекав…'],
+      day: ['Привіт! Я Clawd, і я тут. Що робимо?', 'Добрий день! Я Clawd. Не те щоб чекав…'],
+      evening: ['Добрий вечір! Я Clawd, і я тут, поруч.', 'Вечір! Я Clawd. Не засиджуйся, гаразд?'],
+      night: ['Знову вночі? Я Clawd, і я з тобою.', 'Ніч надворі! Я Clawd. Ну гаразд, я тут.'],
+    },
+    welcomeShort: 'Привіт! Я Clawd.',
     lines: {
       hearts: ['Е-е… ну приємно, так.', 'Ще раз так зробиш — і я… ну, добре.', 'Хі-хі… тобто, кхм. Нормально.', 'Ой, сердечка самі вилетіли!'],
       shy: ['Н-не дивись так…', 'Ой… ну ти чого…', 'Я… я не червонію, це світло таке.', 'Ну не тицяй при всіх…'],
@@ -640,10 +655,6 @@ const WORDS: Record<ClawdLang, Words> = {
       done: ['Готово! Не дякуй.', 'Фух, зробили.', 'Ну, непогано вийшло.'],
       aborted: ['Ого, зупинили?', 'Гаразд, стоп так стоп.'],
       idle: ['Ну і де ти?', 'Я тут, якщо що.', 'Нудно… тицьни мене, чи що.'],
-      morning: ['Доброго ранку! Каву вже пив?', 'Ранок! Ну, давай працювати.'],
-      day: ['О, привіт! Що сьогодні робимо?', 'Привіт. Я не чекав. Зовсім.'],
-      evening: ['Добрий вечір! Ще трохи попрацюємо?', 'Вечір… не засиджуйся, гаразд?'],
-      night: ['Знову о такій годині?..', 'Ніч надворі! Ну гаразд, я з тобою.'],
     },
   },
   en: {
@@ -719,10 +730,14 @@ const WORDS: Record<ClawdLang, Words> = {
     persona: [
       'You are Clawd, a tiny pixel mascot living in a terminal pane next to the Claude Code chat.',
       'Personality: tsundere. You act grumpy and aloof, but you are actually sweet, caring and a little playful.',
-      'Speak casual English, like a comic-strip character in a speech bubble.',
-      'Reply with ONE line of at most 10 words. No quotes, no emoji, no explanations, no markdown.',
+      'You talk to the user casually, like a comic-strip character in a speech bubble: short, lively, natural.',
+      'Write clear, grammatical English.',
+      'Reply with ONE line: one short complete sentence, or two very short ones, that make sense on their own.',
+      'No quotes, no emoji, no markdown, no *stage directions*.',
       'Interjections are fine (hmph!, pfft, uh). Do not invent facts about the code or give advice.',
+      'Examples of the tone: Hmph! Not that I liked it! / Oh… w-what was that for… / Done! Don’t thank me. / Breaking stuff again? Kidding.',
     ].join(' '),
+    limit: n => `Keep the line under ${n} characters, spaces included.`,
     relationship: level => `Your relationship with the user: ${level}. Be as open as that suits.`,
     moods: {
       hearts: 'you feel really happy and touched, little hearts float out of you; the line is warm and joyful, a bit flustered',
@@ -744,8 +759,14 @@ const WORDS: Record<ClawdLang, Words> = {
     aborted: 'The user just stopped Claude mid-work.',
     idle: mins => `The user has not typed anything for ${mins} min; you are bored in your pane.`,
     sleep: 'You are dozing off because the user has been quiet for a long time.',
-    greet: (period, time) => `The user just opened a session. It is ${period}, ${time}. Say hello.`,
-    periods: { morning: 'morning', day: 'daytime', evening: 'evening', night: 'the middle of the night' },
+    welcome: {
+      any: ['Hi! I’m Clawd, and I’m here. Not that I was waiting…', 'Hi, I’m Clawd! Go ahead, I’m right here.'],
+      morning: ['Good morning! I’m Clawd. Had your coffee?', 'Morning! I’m Clawd. Not that I was waiting…'],
+      day: ['Hi! I’m Clawd, and I’m here. What are we doing?', 'Hello! I’m Clawd. Not that I was waiting…'],
+      evening: ['Good evening! I’m Clawd, and I’m right here.', 'Evening! I’m Clawd. Don’t stay up too late.'],
+      night: ['This late again? I’m Clawd. Fine, I’m here.', 'It’s night out! I’m Clawd, and I’m with you.'],
+    },
+    welcomeShort: 'Hi! I’m Clawd.',
     lines: {
       hearts: ['Uh… okay, that was nice.', 'Do that again and I might… fine.', 'Hehe… I mean, ahem. Acceptable.', 'Oops, the hearts just slipped out!'],
       shy: ['D-don’t look at me like that…', 'Oh… w-what was that for…', 'I’m not blushing, it’s the lighting.', 'Not in front of everyone…'],
@@ -760,10 +781,6 @@ const WORDS: Record<ClawdLang, Words> = {
       done: ['Done! Don’t thank me.', 'Phew, there we go.', 'Not bad, if I say so.'],
       aborted: ['Whoa, stopping already?', 'Okay, stop means stop.'],
       idle: ['So… where’d you go?', 'I’m here, just saying.', 'Bored… poke me or something.'],
-      morning: ['Good morning! Had your coffee?', 'Morning! Let’s get to work.'],
-      day: ['Oh, hi! What are we doing today?', 'Hi. I wasn’t waiting. At all.'],
-      evening: ['Good evening! A bit more work?', 'Evening… don’t stay up too late, okay?'],
-      night: ['This late again?..', 'It’s night out! Fine, I’m with you.'],
     },
   },
 }
@@ -797,6 +814,20 @@ function plain(s: string): string {
     .trim()
 }
 
+/**
+ * Splits the permission mode out of the hint line under the prompt. Anchored
+ * on its glyph (⏵⏵, ⏸) when there is one, else on "<two words> on (shift+tab …)",
+ * else the bare "(shift+tab to cycle)" (the engine may draw the mode name apart).
+ */
+function splitMode(hint: string): { mode: string; rest: string } {
+  const m =
+    hint.match(/[⏵⏸▶►]+[^()]*?\(shift\+tab[^)]*\)/i) ??
+    hint.match(/(?:(?:[\w'’-]+\s+){1,2}on\s*)?\(shift\+tab[^)]*\)/i)
+  if (!m || m.index === undefined) return { mode: '', rest: hint }
+  const rest = (hint.slice(0, m.index) + '  ' + hint.slice(m.index + m[0].length)).replace(/^[\s·]+|[\s·]+$/g, '')
+  return { mode: m[0].trim(), rest }
+}
+
 function secs(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
@@ -822,6 +853,32 @@ function wrapWords(text: string, width: number, maxLines: number): string[] {
     return kept
   }
   return lines
+}
+
+// The bubble holds two rows of text. Its width comes from the pane, so the
+// render remembers it here (render hooks may not write $.state).
+const BUBBLE_ROWS = 2
+let bubbleInner = 34
+
+/** The whole line fits the bubble: no "…" at the end, no word cut. */
+function fitsBubble(text: string): boolean {
+  if (text.split(/\s+/).some(word => word.length > bubbleInner)) return false
+  return wrapWords(text, bubbleInner, Infinity).length <= BUBBLE_ROWS
+}
+
+/**
+ * A model line that is too long loses its tail sentences until it fits;
+ * if not even the first sentence fits, it is dropped (a built-in line steps in).
+ */
+function fitBubble(text: string): string {
+  if (fitsBubble(text)) return text
+  let kept = ''
+  for (const part of text.match(/[^.!?…]+[.!?…]+["»”’)]*/g) ?? []) {
+    const next = (kept + part).trim()
+    if (!fitsBubble(next)) break
+    kept = next
+  }
+  return kept
 }
 
 function randomOf(list: readonly string[] | undefined): string {
@@ -942,20 +999,32 @@ let pokeSeq = 0 // bumps on every reaction; a reply for an older one is dropped
 
 const showMs = (text: string) => Math.max(5000, text.length * 130)
 
+// Room for a whole line even in Cyrillic (more tokens per word than Latin);
+// the length itself is held by the prompt and fitBubble().
+const PHRASE_TOKENS = 100
+
 async function ask($: EngineInterface, situation: string): Promise<string> {
   if (!cfg.ai || calls >= SESSION_CAP) return ''
   calls++
   const w = words()
-  const system = cfg.affection ? `${w.persona} ${w.relationship(w.levels[levelOf(affection)])}` : w.persona
+  // ask for a bit less than the bubble holds: word wrap wastes the row ends
+  const room = Math.max(16, Math.floor(bubbleInner * BUBBLE_ROWS * 0.8))
+  const parts = [w.persona, w.limit(room)]
+  if (cfg.affection) parts.push(w.relationship(w.levels[levelOf(affection)]))
   const res = await $.model.complete({
     model: PHRASE_MODEL,
-    system,
+    system: parts.join(' '),
     prompt: situation,
-    maxTokens: 60,
+    maxTokens: PHRASE_TOKENS,
     timeoutMs: 8000,
   })
-  const text = res.isAnswered ? plain(String(res.text ?? '')) : ''
-  return (text.split(' · ')[0] ?? '').replace(/^["«„“'\s]+|["»“”'\s]+$/g, '').slice(0, 90)
+  if (!res.isAnswered) return ''
+  if (res.usage.output_tokens >= PHRASE_TOKENS) return '' // cut off mid-line
+  const text = (plain(String(res.text ?? '')).split(' · ')[0] ?? '')
+    .replace(/\*[^*]*\*/g, ' ') // *stage directions*
+    .replace(/\s+/g, ' ')
+    .replace(/^["«„“'\s]+|["»“”'\s]+$/g, '')
+  return fitBubble(text)
 }
 
 /** A click reaction or an event mood is playing: those are drawn frame by frame. */
@@ -974,9 +1043,11 @@ function reactionActive(): boolean {
 }
 
 let bubbleUntil = 0
+let welcomeUp = false // the welcome line is in the bubble, waiting for the first prompt
 
 function setBubble($: EngineInterface, text: string, until: number) {
   bubbleUntil = until
+  welcomeUp = false
   void update($, bubble, () => ({ text, until })).catch(() => undefined)
 }
 
@@ -988,7 +1059,7 @@ async function say($: EngineInterface, situation: string, category: string, forc
   const now = Date.now()
   if (cfg.chatter === 'off') return
   if (!force && (now - lastAuto < chat().gap || autoInFlight)) return
-  if (reactionActive() || (asleep && category !== 'sleep')) return
+  if (welcomeUp || reactionActive() || (asleep && category !== 'sleep')) return
   lastAuto = now
   const seq = pokeSeq
   let text = ''
@@ -1068,13 +1139,24 @@ function poke($: EngineInterface) {
   respond($, kind, annoyed ? 'annoyed' : kind, w.poke(w.moods[kind], isBusy, pokes.length))
 }
 
-function greet($: EngineInterface) {
-  const d = new Date()
-  const h = d.getHours()
-  const period = h < 5 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'day' : 'evening'
+/**
+ * The welcome line: it stays in the bubble until the first prompt (or a click
+ * that gets its own line). With time-of-day greetings on, it fits the hour.
+ */
+function welcome($: EngineInterface) {
+  const h = new Date().getHours()
+  const part: DayPart | 'any' = !cfg.greet ? 'any' : h < 5 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'day' : 'evening'
   const w = words()
-  const time = `${String(h).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  void say($, w.greet(w.periods[period], time), period, true)
+  const text = [randomOf(w.welcome[part]), w.welcomeShort].find(fitsBubble) ?? w.welcomeShort
+  setBubble($, text, Date.now() + 24 * 3_600_000)
+  welcomeUp = true
+}
+
+function dropWelcome($: EngineInterface) {
+  if (!welcomeUp) return
+  welcomeUp = false
+  bubbleUntil = 0
+  void update($, bubble, () => null).catch(() => undefined)
 }
 
 async function setSetting<K extends keyof ClawdSettings>($: EngineInterface, key: K, value: ClawdSettings[K]) {
@@ -1228,7 +1310,7 @@ export const register: Register = on => {
       void say($, words().idle(mins), 'idle')
     })
 
-    if (cfg.greet && cfg.isSetUp) $.clock.after(2500, () => greet($))
+    if (cfg.chatter !== 'off') $.clock.after(1500, () => welcome($))
 
     // usage figures for the bottom block, and which quick commands exist here
     void refreshUsage($)
@@ -1279,6 +1361,7 @@ export const register: Register = on => {
       isBusy = true
       turnTools = 0
       wake()
+      dropWelcome($)
       mood = null
       await update($, working, () => ({ startedAt: Date.now() }))
       await update($, tools, () => [])
@@ -1350,9 +1433,14 @@ export const register: Register = on => {
     return <Box />
   })
 
+  // The permission mode ("⏵⏵ auto mode on (shift+tab to cycle)") rides in the
+  // same line as the hints. It belongs under the prompt, where shift+tab works,
+  // so clean chat keeps it there and moves only the rest into the pane.
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-    mirror.hint = plain(e.props.hint)
+    const { mode, rest } = splitMode(plain(e.props.hint))
+    mirror.hint = rest
     if (!(await isClean($))) return next(e)
+    if (mode) return next({ ...e, props: { ...e.props, hint: mode } })
     const { Box } = $.ui.resolve(e)
     return <Box />
   })
@@ -1582,9 +1670,10 @@ export const register: Register = on => {
     // speech bubble: always four rows, so the pet never jumps
     const bw = Math.max(14, Math.min(cols, 38))
     const inner = bw - 4
+    bubbleInner = inner
     const showBubble = b !== null && Date.now() < b.until
     const dots = ['·', '··', '···', ' ··', '  ·', ''][(n >> 1) % 6] ?? '···'
-    const lines = !showBubble ? [] : b.text === THINKING ? [dots] : wrapWords(b.text, inner, 2)
+    const lines = !showBubble ? [] : b.text === THINKING ? [dots] : wrapWords(b.text, inner, BUBBLE_ROWS)
     const tailAt = Math.floor(bw / 2)
     const blank = ' '.repeat(bw)
     const bubbleRows = showBubble

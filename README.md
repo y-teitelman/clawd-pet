@@ -24,7 +24,7 @@ It walks while Claude works, naps when you're away, blushes when you poke it, an
 |---|---|
 | 🐾 **Lives beside the chat** | A side pane with an animated pixel pet: drawn in text cells in the terminal, as a crisp picture in the Claude desktop app. |
 | 🖱️ **Click it** | Hearts, shyness, or a tsundere *"hmph!"* and turn-away. Best friends sometimes get star eyes. |
-| 💬 **Speech bubbles** | Comments on your tasks, tool runs, errors and finished replies, plus idle chatter. Built-in lines by default, or optional AI-written lines. |
+| 💬 **Speech bubbles** | Says hi when a session starts and keeps the welcome up until your first prompt. Comments on your tasks, tool runs, errors and finished replies, plus idle chatter. Built-in lines by default, or optional AI-written lines. |
 | 💞 **Affection** | The more you hang out, the sweeter it gets: four relationship levels shift which reactions you see. Saved across sessions. |
 | 😴 **Sleeps** | Dozes off after a few quiet minutes (Zs and all). Click to wake it. It will insist it wasn't asleep. |
 | 🎭 **Moods** | Sheds a tear when a tool fails, hops when a turn finishes, startles when you stop Claude. |
@@ -112,7 +112,7 @@ When on, the chat shows only your messages and Claude's replies, each under its 
 
 - **Status:** what Claude is doing right now, with a timer
 - **Activity:** every tool call, `✓` done, `✗` failed
-- **Hints:** the status line, mode labels and the shortcut hints from under the prompt
+- **Hints:** the status line, mode labels and the shortcut hints from under the prompt (the permission mode stays under the prompt, where shift+tab switches it)
 
 Failed tool calls and permission prompts always stay in the chat. Press **ctrl+o** for the full transcript any time.
 
@@ -165,7 +165,7 @@ The sprite is drawn by one pure function between the `// <sprite>` markers in `h
 |---|---|
 | 🐾 **Живе поруч із чатом** | Бічна панель з анімованим піксельним улюбленцем: у терміналі — з текстових клітинок, у десктопному застосунку Claude — чіткою картинкою. |
 | 🖱️ **Клікни по ньому** | Сердечка, сором'язливість або цундерське «хмф!» з відвертанням. Найкращі друзі іноді бачать зірочки в очах. |
-| 💬 **Хмарки з репліками** | Коментує завдання, інструменти, помилки й готові відповіді, а на простої нудьгує. За замовчуванням — вбудовані фрази, за бажанням — фрази від ШІ. |
+| 💬 **Хмарки з репліками** | Вітається на початку сесії, і привітання висить до твого першого запиту. Коментує завдання, інструменти, помилки й готові відповіді, а на простої нудьгує. За замовчуванням — вбудовані фрази, за бажанням — фрази від ШІ. |
 | 💞 **Прихильність** | Що більше спілкуєтесь, то він ніжніший: чотири рівні стосунків змінюють, які реакції ти бачиш. Зберігається між сесіями. |
 | 😴 **Спить** | Засинає після кількох хвилин тиші (із «Zzz»). Клікни — прокинеться й буде запевняти, що не спав. |
 | 🎭 **Емоції** | Пускає сльозу, коли інструмент падає, підстрибує, коли відповідь готова, лякається, коли ти зупиняєш Claude. |
@@ -253,7 +253,7 @@ claude plugin install clawd-pet --marketplace y-teitelman/clawd-pet
 
 - **Стан:** що Claude робить просто зараз, із таймером
 - **Дії:** кожен виклик інструмента, `✓` готово, `✗` помилка
-- **Підказки:** рядок статусу, позначки режимів і підказки з-під поля вводу
+- **Підказки:** рядок статусу, позначки режимів і підказки з-під поля вводу (режим доступу лишається під полем вводу, де його перемикає shift+tab)
 
 Інструменти, що завершились помилкою, і запити дозволу завжди лишаються в чаті. **ctrl+o** будь-коли показує повний лог.
 

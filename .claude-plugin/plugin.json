@@ -1,6 +1,6 @@
 {
   "name": "clawd-pet",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A tiny tsundere pixel pet in a pane beside your Claude Code chat: click reactions, speech bubbles, affection, naps, moods, skins and an optional clean chat. Unofficial fan mod.",
   "author": { "name": "KypiCTiHka", "url": "https://github.com/y-teitelman" },
   "homepage": "https://github.com/y-teitelman/clawd-pet",
