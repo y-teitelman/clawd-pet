@@ -1,0 +1,6 @@
+{
+  "name": "clawd-pet",
+  "description": "Clawd Pet: a tiny tsundere pixel pet for Claude Code. Unofficial fan mod.",
+  "owner": { "name": "KypiCTiHka" },
+  "plugins": [{ "name": "clawd-pet", "source": "./" }]
+}
